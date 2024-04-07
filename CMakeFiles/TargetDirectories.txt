@@ -1,0 +1,3 @@
+/home/kali/Desktop/gilgil2/netfilter-1m/CMakeFiles/1m-block.dir
+/home/kali/Desktop/gilgil2/netfilter-1m/CMakeFiles/edit_cache.dir
+/home/kali/Desktop/gilgil2/netfilter-1m/CMakeFiles/rebuild_cache.dir
