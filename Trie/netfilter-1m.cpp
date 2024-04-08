@@ -56,8 +56,8 @@ void printWarn()
 }
 void usage()
 {
-	printf("syntax : net_filter <host>\n");
-	printf("sample : net_filter gilgil.net\n");
+	printf("syntax : ./1m-block <file>\n");
+	printf("sample : ./1m-block top-1m.csv\n");
 }
 
 // iptable사전 세팅 함수
@@ -104,10 +104,10 @@ void extracting(unsigned char *data)
         return;
     }
     const char *http_payload = (char *)(data + ip->ihl * 4 + tcp->doff * 4);
-    if (strncmp(http_payload, "GET", 3) != 0)
+    /*if (strncmp(http_payload, "GET", 3) != 0)
     {
         return;
-    }
+    }*/
 
     const char *host_header = strstr(http_payload, "Host: ");
     if (host_header)
@@ -152,6 +152,18 @@ void saveData_trie(const std::string &filename, Trie &trie)
 
 	// 파일 닫기
 	file.close();
+}
+
+
+bool measureSearchTime(Trie* forbidden_site)
+{
+    auto start = std::chrono::high_resolution_clock::now(); // 함수 실행 시작 시간 측정
+    auto it = forbidden_site->find(host); // 요소 검색
+    auto end = std::chrono::high_resolution_clock::now(); // 검색 완료 후 시간 측정
+    std::chrono::duration<double> diff = end - start; // 실행 시간 계산
+	std::cout << "Search time: " << diff.count() << " s\n";
+
+	return it;
 }
 
 /* returns packet id */
@@ -206,8 +218,9 @@ static u_int32_t print_pkt(struct nfq_data *tb)
 
 	if (ret >= 0)
 	{
-		dump(data, ret);
+		//dump(data, ret);
 		extracting(data);
+		strcpy(host, " ");
 		printf("payload_len=%d\n", ret);
 		printf("\n");
 	}
@@ -220,10 +233,10 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *,
 {
 	Trie *trie = static_cast<Trie *>(data);
 	u_int32_t id = print_pkt(nfa);
-	if (trie->find(host))
+	if (measureSearchTime(trie))
 	{
-		strcpy(host, " ");
 		printWarn();
+		strcpy(host, " ");
 		sleep(1);
 		return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
 	}
@@ -238,7 +251,7 @@ int main(int argc, char **argv)
 		usage();
 		return -1;
 	}
-	// signal(SIGINT, signalHandler);
+	signal(SIGINT, signalHandler);
 	char *file_name = argv[1];
 	Trie forbidden_site_trie = Trie();
 
@@ -296,24 +309,12 @@ int main(int argc, char **argv)
 		fprintf(stderr, "error during nfq_create_queue()\n");
 		exit(1);
 	}
-
-	/*
-	패킷 처리 큐의 동작 모드를 설정
-	qh : 핸들
-	NFQNL_COPY_PACKET : 설정할 동작 모드
-	0xffff : 동작 모드에 따라 설정할 범위
-	*/
 	printf("setting copy_packet mode\n");
 	if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0)
 	{
 		fprintf(stderr, "can't set packet_copy mode\n");
 		exit(1);
 	}
-
-	/*
-	패킷 처리 큐의 파일 디스크립터(File Descriptor)를 얻는 역할
-	h : 핸들
-	*/
 	fd = nfq_fd(h);
 
 	for (;;)
