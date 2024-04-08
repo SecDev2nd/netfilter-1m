@@ -8,7 +8,8 @@ project(1m-block)
 set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/netfilter-1m.cpp
 )
-
+# 디버그 옵션 추가
+set(CMAKE_BUILD_TYPE Debug)
 # 실행 파일 생성
 add_executable(${PROJECT_NAME} ${SOURCES})
 

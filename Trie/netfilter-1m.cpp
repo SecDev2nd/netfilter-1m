@@ -27,19 +27,13 @@ void setTables();
 void free_iptable();
 void dump(unsigned char *buf, int size);
 
-std::map<std::string, int> saveData(const std::string &filename);
-
 static u_int32_t print_pkt(struct nfq_data *tb);
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 			  struct nfq_data *nfa, void *data);
 
 char host[200];
-char *target_host;
 
-std::map<std::string, int> forbidden_site;
-Trie forbidden_site_trie;
 
-// ESC누르면 종료
 void signalHandler(int signum)
 {
 
@@ -97,85 +91,46 @@ void dump(unsigned char *buf, int size)
 
 void extracting(unsigned char *data)
 {
-	const struct iphdr *ip = (const struct iphdr *)data;
+    const struct iphdr *ip = (const struct iphdr *)data;
 
-	// TCP check
-	if (ip->protocol != IPPROTO_TCP)
-	{
-		return;
-	}
-	const struct tcphdr *tcp = (struct tcphdr *)(data + ip->ihl * 4);
-	if (tcp->th_dport != htons(80))
-	{
-		return;
-	}
-	const char *http_payload = (char *)(data + ip->ihl * 4 + tcp->doff * 4);
-	if (strncmp(http_payload, "GET", 3) != 0)
-	{
-		return;
-	}
+    // TCP check
+    if (ip->protocol != IPPROTO_TCP)
+    {
+        return;
+    }
+    const struct tcphdr *tcp = (struct tcphdr *)(data + ip->ihl * 4);
+    if (tcp->th_dport != htons(80))
+    {
+        return;
+    }
+    const char *http_payload = (char *)(data + ip->ihl * 4 + tcp->doff * 4);
+    if (strncmp(http_payload, "GET", 3) != 0)
+    {
+        return;
+    }
 
-	const char *host_header = strstr(http_payload, "Host: ");
-	if (host_header)
-	{
-		host_header += 6;									 // "Host: " 문자열 다음으로 포인터를 이동합니다.
-		const char *end_of_line = strchr(host_header, '\r'); // 호스트 이름의 끝을 찾습니다.
-		if (end_of_line)
-		{
-			size_t hostname_length = end_of_line - host_header;
-			strncpy(host, host_header, hostname_length);
-			host[hostname_length] = '\0'; // Null-terminate the string
-		}
-	}
+    const char *host_header = strstr(http_payload, "Host: ");
+    if (host_header)
+    {
+        host_header += 6;
+        const char *end_of_line = strchr(host_header, '\r');
+        if (end_of_line)
+        {
+            size_t hostname_length = end_of_line - host_header;
+            strncpy(host, host_header, sizeof(host) - 1);
+            host[sizeof(host) - 1] = '\0';
+        }
+    }
 }
 
-std::map<std::string, int> saveData(const std::string &filename)
+void saveData_trie(const std::string &filename, Trie &trie)
 {
-	std::map<std::string, int> dataMap;
-
 	// CSV 파일 오픈
 	std::ifstream file(filename);
 	if (!file.is_open())
 	{
 		std::cerr << "Failed to open file: " << filename << std::endl;
-		return dataMap; // 빈 맵 반환
-	}
-
-	// CSV 파일에서 데이터 읽기
-	std::string line;
-	while (getline(file, line))
-	{
-		std::stringstream ss(line);
-		std::string token;
-		std::vector<std::string> tokens;
-		while (std::getline(ss, token, ','))
-		{
-			tokens.push_back(token);
-		}
-		if (tokens.size() >= 2)
-		{
-			int key = std::stoi(tokens[0]); // 첫 번째 열을 int로 변환하여 키로 사용
-			std::string value = tokens[1];	// 두 번째 열을 값으로 사용
-			dataMap[value] = key;
-		}
-	}
-
-	// 파일 닫기
-	file.close();
-
-	return dataMap;
-}
-
-Trie saveData_trie(const std::string &filename)
-{
-	Trie trie;
-
-	// CSV 파일 오픈
-	std::ifstream file(filename);
-	if (!file.is_open())
-	{
-		std::cerr << "Failed to open file: " << filename << std::endl;
-		return trie; // 빈 맵 반환
+		return;
 	}
 
 	std::string line;
@@ -188,18 +143,17 @@ Trie saveData_trie(const std::string &filename)
 		{
 			tokens.push_back(token);
 		}
-		if (tokens.size() >= 2)
+		if (tokens.size() == 2)
 		{
 			std::string value = tokens[1]; // 두 번째 열을 값으로 사용
-			trie.insert(value.c_str());
+			trie.insert(value, 0);
 		}
 	}
 
 	// 파일 닫기
 	file.close();
-
-	return trie;
 }
+
 /* returns packet id */
 static u_int32_t print_pkt(struct nfq_data *tb)
 {
@@ -262,10 +216,11 @@ static u_int32_t print_pkt(struct nfq_data *tb)
 }
 
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *,
-			  struct nfq_data *nfa, void *hostname)
+			  struct nfq_data *nfa, void *data)
 {
+	Trie *trie = static_cast<Trie *>(data);
 	u_int32_t id = print_pkt(nfa);
-	if (forbidden_site.find(host) != forbidden_site.end())
+	if (trie->find(host))
 	{
 		strcpy(host, " ");
 		printWarn();
@@ -283,27 +238,16 @@ int main(int argc, char **argv)
 		usage();
 		return -1;
 	}
-	signal(SIGINT, signalHandler);
+	// signal(SIGINT, signalHandler);
 	char *file_name = argv[1];
+	Trie forbidden_site_trie = Trie();
 
 	auto start = std::chrono::high_resolution_clock::now();
-	forbidden_site = saveData(file_name);
+	saveData_trie(file_name, forbidden_site_trie);
 	auto end = std::chrono::high_resolution_clock::now();
 
 	std::chrono::duration<double> diff = end - start;
 	std::cout << "Time to run saveData: " << diff.count() << " s\n";
-
-	if (forbidden_site.empty())
-	{
-		std::cerr << "Failed to load data from file: " << file_name << std::endl;
-		return -1;
-	}
-
-	auto start2 = std::chrono::high_resolution_clock::now();
-	forbidden_site_trie = saveData_trie(file_name);
-	auto end2 = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> diff2 = end2 - start2;
-	std::cout << "Time to run saveData: " << diff2.count() << " s\n";
 
 	struct nfq_handle *h;
 
@@ -324,8 +268,6 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	// libnetfilter_queue에 있는 함수
-	// 네트워크 필터링을 위해 커널에 바인딩된 프로토콜 패밀리(AF_INET 등)를 해제하는 역할
 	printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
 	if (nfq_unbind_pf(h, AF_INET) < 0)
 	{
@@ -333,11 +275,6 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	/*
-	특정 프로토콜 패밀리(AF_INET 등)에 대한 네트워크 필터링을 설정
-	h: 핸들
-	AF_INET : 바인딩할 프로토콜 패밀리 -> AF_INET은 Ipv4v 필터링활성화
-	*/
 	printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
 	if (nfq_bind_pf(h, AF_INET) < 0)
 	{
@@ -353,7 +290,7 @@ int main(int argc, char **argv)
 	NULL(data) : 콜백함수에 전달될 데이터
 	*/
 	printf("binding this socket to queue '0'\n");
-	qh = nfq_create_queue(h, 0, &cb, NULL);
+	qh = nfq_create_queue(h, 0, &cb, &forbidden_site_trie);
 	if (!qh)
 	{
 		fprintf(stderr, "error during nfq_create_queue()\n");

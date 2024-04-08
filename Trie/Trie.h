@@ -3,15 +3,17 @@
 
 #define CHAR_LENGTH 27
 
+using namespace std;
+
 struct Trie
 {
     bool finish;
-    Trie *next[CHAR_LENGTH];
+    Trie *node[CHAR_LENGTH];
 
     // Constructor
     Trie() : finish(false)
     {
-        memset(next, 0, sizeof(next));
+        memset(node, 0, sizeof(node));
     }
 
     // Destructor
@@ -19,41 +21,61 @@ struct Trie
     {
         for (int i = 0; i < CHAR_LENGTH; i++)
         {
-            if (next[i])
+            if (node[i])
             {
-                delete next[i];
+                delete node[i];    // 노드가 널 포인터인지 확인 후 삭제
+                node[i] = nullptr; // 삭제된 노드를 널로 설정하여 이중 삭제를 방지
             }
         }
     }
 
-    void insert(const char *key)
+    int checkChr(const char *key)
     {
-        if (*key == '\0')
+        int current;
+        if (*key >= 'a' && *key <= 'z')
         {
-            finish = true; // End of the word
+            current = *key - 'a';
+        }
+        else if (*key >= '0' && *key <= '9')
+        {
+            current = *key - '0'; // 알파벳 다음부터 인덱스 계산
         }
         else
         {
-            int current = *key - 'a'; // Convert to index
-            if (next[current] == NULL)
+            current = 26; // '.'의 인덱스
+        }
+        return current;
+    }
+
+    void insert(string &key, int index)
+    {
+
+        if (index == key.length() - 1)
+        {
+            finish = true;
+        }
+        else
+        {
+            int next = checkChr(&key[index]);
+            if (node[next] == NULL)
             {
-                next[current] = new Trie();
+                node[next] = new Trie();
             }
-            next[current]->insert(key + 1);
+            node[next]->insert(key, index + 1);
         }
     }
 
-    Trie *find(const char *key)
+    bool find(const char *key)
     {
         if (*key == '\0')
         {
-            return this; // End of the word
+            return finish;
         }
-        int current = *key - 'a';
-        if (next[current] == NULL)
+        int current = checkChr(key);
+        if (node[current] == NULL)
         {
             return NULL;
         }
-        return next[current]->find(key + 1);
+        return node[current]->find(key + 1);
     }
 };
