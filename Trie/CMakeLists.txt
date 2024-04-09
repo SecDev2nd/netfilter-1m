@@ -7,6 +7,7 @@ project(1m-block)
 # 모든 소스 파일을 소스 변수에 추가
 set(SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/netfilter-1m.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/Trie.cpp
 )
 # 디버그 옵션 추가
 set(CMAKE_BUILD_TYPE Debug)

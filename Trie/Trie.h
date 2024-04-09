@@ -1,44 +1,24 @@
-
 #include <cstring>
+#include <string>
 
 #define CHAR_LENGTH 27
 
-using namespace std;
-
-struct Trie
+class TrieNode
 {
-    bool finish;
-    Trie *node[CHAR_LENGTH];
+private:
+    TrieNode *child[CHAR_LENGTH] = {NULL};
+    bool finish = false;
 
-    // Constructor
-    Trie() : finish(false)
-    {
-        memset(node, 0, sizeof(node));
-    }
-
-    // Destructor
-    ~Trie()
-    {
-        for (int i = 0; i < CHAR_LENGTH; i++)
-        {
-            if (node[i])
-            {
-                delete node[i];    // 노드가 널 포인터인지 확인 후 삭제
-                node[i] = nullptr; // 삭제된 노드를 널로 설정하여 이중 삭제를 방지
-            }
-        }
-    }
-
-    int checkChr(const char *key)
+    int checkChr(const char ch)
     {
         int current;
-        if (*key >= 'a' && *key <= 'z')
+        if (ch >= 'a' && ch <= 'z')
         {
-            current = *key - 'a';
+            current = ch - 'a';
         }
-        else if (*key >= '0' && *key <= '9')
+        else if (ch >= '0' && ch <= '9')
         {
-            current = *key - '0'; // 알파벳 다음부터 인덱스 계산
+            current = ch - '0'; // 알파벳 다음부터 인덱스 계산
         }
         else
         {
@@ -47,35 +27,75 @@ struct Trie
         return current;
     }
 
-    void insert(string &key, int index)
-    {
+public:
+    TrieNode() {}
 
-        if (index == key.length() - 1)
+    ~TrieNode()
+    {
+        for (int i = 0; i < CHAR_LENGTH; i++)
         {
-            finish = true;
-        }
-        else
-        {
-            int next = checkChr(&key[index]);
-            if (node[next] == NULL)
+            if (child[i])
             {
-                node[next] = new Trie();
+                delete child[i];
+                child[i] = nullptr;
             }
-            node[next]->insert(key, index + 1);
         }
     }
 
-    bool find(const char *key)
+    friend class Trie;
+};
+
+class Trie
+{
+private:
+    TrieNode *root;
+
+public:
+    // Constructor
+    Trie()
     {
-        if (*key == '\0')
+        this->root = new TrieNode();
+    }
+
+    // Destructor
+    ~Trie()
+    {
+        delete root;
+    }
+
+    void insert(const std::string &str)
+    {
+        TrieNode *current = this->root;
+
+        for (const char ch : str)
         {
-            return finish;
+            int next = current->checkChr(ch);
+            if (current->child[next] == NULL)
+            {
+                current->child[next] = new TrieNode();
+                
+            }
+            current = current->child[next];
+            
         }
-        int current = checkChr(key);
-        if (node[current] == NULL)
+
+        current->finish = true;
+    }
+
+    bool find(const std::string &str)
+    {
+        TrieNode *current = this->root;
+
+        for (const char ch : str)
         {
-            return NULL;
+            int next = current->checkChr(ch);
+            if (current->child[next] == NULL)
+            {
+                return 0;
+            }
+            current = current->child[next];
         }
-        return node[current]->find(key + 1);
+
+        return current->finish;
     }
 };

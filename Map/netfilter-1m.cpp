@@ -33,7 +33,6 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 			  struct nfq_data *nfa, void *data);
 
 char host[200];
-char *target_host;
 
 std::map<std::string, int> forbidden_site;
 
@@ -49,13 +48,13 @@ void signalHandler(int signum)
 void printWarn()
 {
 	printf("Catch Forbidden Site\n");
-	printf(" _____   ____    ____      __    __   ____  ____   ____   ____  ____    ____ \n");
-	printf("|     | |    \\  |    |    |  |__|  | /    ||    \\ |    \\ |    ||    \\  /    |\n");
-	printf("|   __| |  o  )  |  |     |  |  |  ||  o  ||  D  )|  _  | |  | |  _  ||   __|\n");
-	printf("|  |_   |     |  |  |     |  |  |  ||     ||    / |  |  | |  | |  |  ||  |  |\n");
-	printf("|   _]  |  O  |  |  |     |  `  '  ||  _  ||    \\ |  |  | |  | |  |  ||  |_ |\n");
-	printf("|  |    |     |  |  |      \\      / |  |  ||  .  \\|  |  | |  | |  |  ||     |\n");
-	printf("|__|    |_____| |____|      \\_/\\_/  |__|__||__|\\_||__|__||____||__|__||___,_|\n");
+	printf(" _____   ____    ____      __    __    ____   ____   ____   ____  ____    ____ \n");
+	printf("|     | |    \\  |    |    |  |__|  |  /    | |    \\ |    \\ |    ||    \\  /    |\n");
+	printf("|   __| |  o  )  |  |     |  |  |  | |  o  | |  D  )|  _  | |  | |  _  ||   __|\n");
+	printf("|  |_   |     |  |  |     |  |  |  | |     | |    / |  |  | |  | |  |  ||  |  |\n");
+	printf("|   _]  |  O  |  |  |     |  `  '  | |  _  | |    \\ |  |  | |  | |  |  ||  |_ |\n");
+	printf("|  |    |     |  |  |      \\      /  |  |  | |  .  \\|  |  | |  | |  |  ||     |\n");
+	printf("|__|    |_____| |____|      \\_/\\_/   |__|__| |__|\\_||__|__||____||__|__||___,_|\n");
 	printf("                                                                           \n");
 }
 void usage()
@@ -108,15 +107,16 @@ void extracting(unsigned char *data)
 		return;
 	}
 	const char *http_payload = (char *)(data + ip->ihl * 4 + tcp->doff * 4);
-	if (strncmp(http_payload, "GET", 3) != 0)
+	/*if (strncmp(http_payload, "GET", 3) != 0)
 	{
+		printf("NotGET\n");
 		return;
-	}
+	}*/
 
 	const char *host_header = strstr(http_payload, "Host: ");
 	if (host_header)
 	{
-		host_header += 6;									 // "Host: " 문자열 다음으로 포인터를 이동합니다.
+		host_header += 6;									 // "Host: " 문자열 다음으로 포인터를 이동합니다. www. 같은거 패스
 		const char *end_of_line = strchr(host_header, '\r'); // 호스트 이름의 끝을 찾습니다.
 		if (end_of_line)
 		{
@@ -126,6 +126,18 @@ void extracting(unsigned char *data)
 		}
 	}
 }
+
+bool measureSearchTime(std::map<std::string, int> &forbidden_site)
+{
+    auto start = std::chrono::high_resolution_clock::now(); // 함수 실행 시작 시간 측정
+    auto it = forbidden_site.find(host); // 요소 검색
+    auto end = std::chrono::high_resolution_clock::now(); // 검색 완료 후 시간 측정
+    std::chrono::duration<double> diff = end - start; // 실행 시간 계산
+	std::cout << "Search time: " << diff.count() << " s\n";
+
+	return (it != forbidden_site.end()) ? true : false;
+}
+
 
 std::map<std::string, int> saveData(const std::string &filename)
 {
@@ -229,7 +241,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *,
 			  struct nfq_data *nfa, void *hostname)
 {
 	u_int32_t id = print_pkt(nfa);
-	if (forbidden_site.find(host) != forbidden_site.end())
+	if (measureSearchTime(forbidden_site))
 	{
 		strcpy(host, " ");
 		printWarn();
@@ -281,21 +293,12 @@ int main(int argc, char **argv)
 		fprintf(stderr, "error during nfq_open()\n");
 		exit(1);
 	}
-
-	// libnetfilter_queue에 있는 함수
-	// 네트워크 필터링을 위해 커널에 바인딩된 프로토콜 패밀리(AF_INET 등)를 해제하는 역할
 	printf("unbinding existing nf_queue handler for AF_INET (if any)\n");
 	if (nfq_unbind_pf(h, AF_INET) < 0)
 	{
 		fprintf(stderr, "error during nfq_unbind_pf()\n");
 		exit(1);
 	}
-
-	/*
-	특정 프로토콜 패밀리(AF_INET 등)에 대한 네트워크 필터링을 설정
-	h: 핸들
-	AF_INET : 바인딩할 프로토콜 패밀리 -> AF_INET은 Ipv4v 필터링활성화
-	*/
 	printf("binding nfnetlink_queue as nf_queue handler for AF_INET\n");
 	if (nfq_bind_pf(h, AF_INET) < 0)
 	{
@@ -317,24 +320,12 @@ int main(int argc, char **argv)
 		fprintf(stderr, "error during nfq_create_queue()\n");
 		exit(1);
 	}
-
-	/*
-	패킷 처리 큐의 동작 모드를 설정
-	qh : 핸들
-	NFQNL_COPY_PACKET : 설정할 동작 모드
-	0xffff : 동작 모드에 따라 설정할 범위
-	*/
 	printf("setting copy_packet mode\n");
 	if (nfq_set_mode(qh, NFQNL_COPY_PACKET, 0xffff) < 0)
 	{
 		fprintf(stderr, "can't set packet_copy mode\n");
 		exit(1);
 	}
-
-	/*
-	패킷 처리 큐의 파일 디스크립터(File Descriptor)를 얻는 역할
-	h : 핸들
-	*/
 	fd = nfq_fd(h);
 
 	for (;;)

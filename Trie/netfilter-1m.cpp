@@ -31,7 +31,7 @@ static u_int32_t print_pkt(struct nfq_data *tb);
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 			  struct nfq_data *nfa, void *data);
 
-char host[200];
+char host[100];
 
 
 void signalHandler(int signum)
@@ -92,8 +92,7 @@ void dump(unsigned char *buf, int size)
 void extracting(unsigned char *data)
 {
     const struct iphdr *ip = (const struct iphdr *)data;
-
-    // TCP check
+    //TCP check
     if (ip->protocol != IPPROTO_TCP)
     {
         return;
@@ -102,12 +101,9 @@ void extracting(unsigned char *data)
     if (tcp->th_dport != htons(80))
     {
         return;
-    }
+    } 
     const char *http_payload = (char *)(data + ip->ihl * 4 + tcp->doff * 4);
-    /*if (strncmp(http_payload, "GET", 3) != 0)
-    {
-        return;
-    }*/
+    
 
     const char *host_header = strstr(http_payload, "Host: ");
     if (host_header)
@@ -123,7 +119,7 @@ void extracting(unsigned char *data)
     }
 }
 
-void saveData_trie(const std::string &filename, Trie &trie)
+void saveData_trie(const std::string &filename, Trie *trie)
 {
 	// CSV 파일 오픈
 	std::ifstream file(filename);
@@ -146,7 +142,7 @@ void saveData_trie(const std::string &filename, Trie &trie)
 		if (tokens.size() == 2)
 		{
 			std::string value = tokens[1]; // 두 번째 열을 값으로 사용
-			trie.insert(value, 0);
+			trie->insert(value);
 		}
 	}
 
@@ -220,7 +216,6 @@ static u_int32_t print_pkt(struct nfq_data *tb)
 	{
 		//dump(data, ret);
 		extracting(data);
-		strcpy(host, " ");
 		printf("payload_len=%d\n", ret);
 		printf("\n");
 	}
@@ -231,9 +226,9 @@ static u_int32_t print_pkt(struct nfq_data *tb)
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *,
 			  struct nfq_data *nfa, void *data)
 {
-	Trie *trie = static_cast<Trie *>(data);
+	Trie *trie = static_cast<Trie*>(data);
 	u_int32_t id = print_pkt(nfa);
-	if (measureSearchTime(trie))
+	if (trie->find(host))
 	{
 		printWarn();
 		strcpy(host, " ");
@@ -253,10 +248,10 @@ int main(int argc, char **argv)
 	}
 	signal(SIGINT, signalHandler);
 	char *file_name = argv[1];
-	Trie forbidden_site_trie = Trie();
+	Trie forbidden_site_trie;
 
 	auto start = std::chrono::high_resolution_clock::now();
-	saveData_trie(file_name, forbidden_site_trie);
+	saveData_trie(file_name, &forbidden_site_trie);
 	auto end = std::chrono::high_resolution_clock::now();
 
 	std::chrono::duration<double> diff = end - start;
