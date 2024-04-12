@@ -121,7 +121,7 @@ void extracting(unsigned char *data)
     }
 }
 
-void saveData_trie(const std::string &filename)
+void saveData_trie(const std::string &filename, Trie* trie)
 {
 	// CSV 파일 오픈
 	std::ifstream file(filename);
@@ -144,7 +144,7 @@ void saveData_trie(const std::string &filename)
 		if (tokens.size() >= 2)
 		{
 			std::string value = tokens[1]; // 두 번째 열을 값으로 사용
-			trie.insert(value);
+			trie->insert(value);
 		}
 	}
 
@@ -155,8 +155,10 @@ void saveData_trie(const std::string &filename)
 
 bool measureSearchTime(Trie* forbidden_site)
 {
+	std::string str(host, strlen(host));
     auto start = std::chrono::high_resolution_clock::now(); // 함수 실행 시작 시간 측정
-    auto it = forbidden_site->find(host); // 요소 검색
+	
+    auto it = forbidden_site->find(str); // 요소 검색
     auto end = std::chrono::high_resolution_clock::now(); // 검색 완료 후 시간 측정
     std::chrono::duration<double> diff = end - start; // 실행 시간 계산
 	std::cout << "Search time: " << diff.count() << " s\n";
@@ -228,10 +230,10 @@ static u_int32_t print_pkt(struct nfq_data *tb)
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *,
 			  struct nfq_data *nfa, void *data)
 {
-	// Trie *trie = static_cast<Trie*>(data);
-	std::string str(host, strlen(host));
+	Trie *trie = static_cast<Trie*>(data);
+	
 	u_int32_t id = print_pkt(nfa);
-	if (trie.find(str))
+	if (measureSearchTime(trie))
 	{
 		printWarn();
 		std::memset(host, 0, strlen(host)); // host 배열 초기화
@@ -254,7 +256,7 @@ int main(int argc, char **argv)
 	Trie forbidden_site_trie;
 
 	auto start = std::chrono::high_resolution_clock::now();
-	saveData_trie(file_name);
+	saveData_trie(file_name, &forbidden_site_trie);
 	auto end = std::chrono::high_resolution_clock::now();
 
 	std::chrono::duration<double> diff = end - start;
