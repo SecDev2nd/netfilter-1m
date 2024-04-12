@@ -1,48 +1,32 @@
 #include <cstring>
 #include <string>
-
+#include <unordered_map>
+#include <iostream>
 #define CHAR_LENGTH 27
 
 class TrieNode
 {
-private:
-    TrieNode *child[CHAR_LENGTH] = {NULL};
-    bool finish = false;
-
-    int checkChr(const char ch)
-    {
-        int current;
-        if (ch >= 'a' && ch <= 'z')
-        {
-            current = ch - 'a';
-        }
-        else if (ch >= '0' && ch <= '9')
-        {
-            current = ch - '0'; // 알파벳 다음부터 인덱스 계산
-        }
-        else
-        {
-            current = 26; // '.'의 인덱스
-        }
-        return current;
-    }
-
 public:
-    TrieNode() {}
+    std::unordered_map<char, TrieNode *> children;
+    bool isFinish;
 
-    ~TrieNode()
+    TrieNode() : isFinish(false) {}
+
+    TrieNode *getChild(char ch)
     {
-        for (int i = 0; i < CHAR_LENGTH; i++)
+        if (children.find(ch) != children.end())
         {
-            if (child[i])
-            {
-                delete child[i];
-                child[i] = nullptr;
-            }
+            return children[ch];
         }
+        return nullptr;
     }
 
-    friend class Trie;
+    TrieNode *addChild(char ch)
+    {
+        TrieNode *node = new TrieNode();
+        children[ch] = node;
+        return node;
+    }
 };
 
 class Trie
@@ -51,16 +35,9 @@ private:
     TrieNode *root;
 
 public:
-    // Constructor
     Trie()
     {
-        this->root = new TrieNode();
-    }
-
-    // Destructor
-    ~Trie()
-    {
-        delete root;
+        root = new TrieNode();
     }
 
     void insert(const std::string &str)
@@ -69,17 +46,14 @@ public:
 
         for (const char ch : str)
         {
-            int next = current->checkChr(ch);
-            if (current->child[next] == NULL)
+            if (!current->getChild(ch))
             {
-                current->child[next] = new TrieNode();
-                
+                current->addChild(ch);
             }
-            current = current->child[next];
-            
+            current = current->getChild(ch);
         }
 
-        current->finish = true;
+        current->isFinish = true;
     }
 
     bool find(const std::string &str)
@@ -88,14 +62,32 @@ public:
 
         for (const char ch : str)
         {
-            int next = current->checkChr(ch);
-            if (current->child[next] == NULL)
+            current = current->getChild(ch);
+            if (!current)
             {
-                return 0;
+                return false;
             }
-            current = current->child[next];
         }
 
-        return current->finish;
+        return current->isFinish;
+    }
+
+    void printAll()
+    {
+        std::string str;
+        printAllHelper(this->root, str);
+    }
+
+    void printAllHelper(TrieNode *node, std::string str)
+    {
+        if (node->isFinish)
+        {
+            std::cout << str << std::endl;
+        }
+
+        for (auto it = node->children.begin(); it != node->children.end(); ++it)
+        {
+            printAllHelper(it->second, str + it->first);
+        }
     }
 };

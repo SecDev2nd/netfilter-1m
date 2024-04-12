@@ -1,4 +1,4 @@
-#include <iostream>
+
 #include <cstdlib>
 #include <unistd.h>
 #include <netinet/in.h>
@@ -33,6 +33,7 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
 char host[100];
 
+Trie trie;
 
 void signalHandler(int signum)
 {
@@ -98,10 +99,10 @@ void extracting(unsigned char *data)
         return;
     }
     const struct tcphdr *tcp = (struct tcphdr *)(data + ip->ihl * 4);
-    if (tcp->th_dport != htons(80))
-    {
-        return;
-    } 
+    // if (tcp->th_dport != htons(80))
+    // {
+    //     return;
+    // } 
     const char *http_payload = (char *)(data + ip->ihl * 4 + tcp->doff * 4);
     
 
@@ -113,13 +114,14 @@ void extracting(unsigned char *data)
         if (end_of_line)
         {
             size_t hostname_length = end_of_line - host_header;
-            strncpy(host, host_header, sizeof(host) - 1);
-            host[sizeof(host) - 1] = '\0';
+			strncpy(host, host_header, hostname_length);
+			host[hostname_length] = '\0';
+			printf("host : %s\n", host);
         }
     }
 }
 
-void saveData_trie(const std::string &filename, Trie *trie)
+void saveData_trie(const std::string &filename)
 {
 	// CSV 파일 오픈
 	std::ifstream file(filename);
@@ -139,10 +141,10 @@ void saveData_trie(const std::string &filename, Trie *trie)
 		{
 			tokens.push_back(token);
 		}
-		if (tokens.size() == 2)
+		if (tokens.size() >= 2)
 		{
 			std::string value = tokens[1]; // 두 번째 열을 값으로 사용
-			trie->insert(value);
+			trie.insert(value);
 		}
 	}
 
@@ -166,8 +168,8 @@ bool measureSearchTime(Trie* forbidden_site)
 static u_int32_t print_pkt(struct nfq_data *tb)
 {
 	int id = 0;
-	struct nfqnl_msg_packet_hdr *ph;  // 네트워크 패킷의 헤더 정보 , ph를 사용하여 패킷의 프로토콜, 훅(hook), 패킷 ID 등의 정보를 액세스
-	struct nfqnl_msg_packet_hw *hwph; // 네트워크 패킷의 네트워크 인터페이스의 고유한 주소 정보
+	struct nfqnl_msg_packet_hdr *ph;
+	struct nfqnl_msg_packet_hw *hwph;
 	u_int32_t mark, ifi;
 	int ret;
 	unsigned char *data;
@@ -226,12 +228,13 @@ static u_int32_t print_pkt(struct nfq_data *tb)
 static int cb(struct nfq_q_handle *qh, struct nfgenmsg *,
 			  struct nfq_data *nfa, void *data)
 {
-	Trie *trie = static_cast<Trie*>(data);
+	// Trie *trie = static_cast<Trie*>(data);
+	std::string str(host, strlen(host));
 	u_int32_t id = print_pkt(nfa);
-	if (trie->find(host))
+	if (trie.find(str))
 	{
 		printWarn();
-		strcpy(host, " ");
+		std::memset(host, 0, strlen(host)); // host 배열 초기화
 		sleep(1);
 		return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
 	}
@@ -251,12 +254,14 @@ int main(int argc, char **argv)
 	Trie forbidden_site_trie;
 
 	auto start = std::chrono::high_resolution_clock::now();
-	saveData_trie(file_name, &forbidden_site_trie);
+	saveData_trie(file_name);
 	auto end = std::chrono::high_resolution_clock::now();
 
 	std::chrono::duration<double> diff = end - start;
 	std::cout << "Time to run saveData: " << diff.count() << " s\n";
 
+
+	//trie.printAll();
 	struct nfq_handle *h;
 
 	struct nfq_q_handle *qh;
