@@ -16,3 +16,7 @@ Trie를 사용한 경우
 2. map대신에 set을 쓰자, map과 탐색은 같은데 value가  없어서 메모리를 덜 차지한다.  
 3. 두 자료구조의 메모리를 비교해보자.  
 
+
+---
+Tip.  
+시간 측정시 [멘토님의 헤더파일](https://github.com/snoopspy/gtimediff) 써봐도 좋다!
